@@ -22,7 +22,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // │ ├─┬ dist-electron
 // │ │ ├── main.js
 // │ │ └── preload.mjs
-// │
 process.env.APP_ROOT = path.join(__dirname, '..')
 
 // 🚧 Use ['ENV_NAME'] avoid vite:define plugin - Vite@2.x
@@ -121,6 +120,14 @@ function isDirectory(full: string) {
   }
 }
 
+function isFile(full: string) {
+  try {
+    return fs.statSync(full).isFile()
+  } catch {
+    return false
+  }
+}
+
 // Archive extraction supporting zip and 7z/rar via 7zip
 async function extractArchive(archivePath: string, destDir: string) {
   await fsp.mkdir(destDir, { recursive: true })
@@ -160,10 +167,10 @@ async function downloadToTemp(url: string): Promise<string> {
   const tmp = path.join(os.tmpdir(), `zzzmm_${Date.now()}`)
   await new Promise<void>((resolve, reject) => {
     const file = fs.createWriteStream(tmp)
-    https.get(url, (res) => {
+    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } }, (res) => {
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         // Handle redirects
-        https.get(res.headers.location, (res2) => res2.pipe(file))
+        https.get(res.headers.location, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } }, (res2) => res2.pipe(file))
           .on('error', reject)
         file.on('finish', () => file.close(() => resolve()))
         return
@@ -178,6 +185,55 @@ async function downloadToTemp(url: string): Promise<string> {
   })
   return tmp
 }
+
+// --------------------------- Images (data URL helper) ---------------------------
+function guessMimeFromPath(p: string): string {
+  const ext = path.extname(p).toLowerCase()
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg'
+  if (ext === '.png') return 'image/png'
+  if (ext === '.webp') return 'image/webp'
+  if (ext === '.gif') return 'image/gif'
+  return 'application/octet-stream'
+}
+
+ipcMain.handle('images:readDataUrl', async (_e, absPath: string) => {
+  try {
+    const buf = await fsp.readFile(absPath)
+    const mime = guessMimeFromPath(absPath)
+    const base64 = buf.toString('base64')
+    return `data:${mime};base64,${base64}`
+  } catch {
+    return null
+  }
+})
+
+// Save an image from URL into imagesRoot/<character>/icon.ext
+ipcMain.handle('images:saveFromUrl', async (_e, character: string, imageUrl: string) => {
+  const { imagesRoot } = await readSettings()
+  if (!imagesRoot) throw new Error('Images root not set')
+  if (!character?.trim()) throw new Error('Character name required')
+  if (!imageUrl?.trim()) throw new Error('Image URL required')
+  const dir = path.join(imagesRoot, character)
+  ensureDirSync(dir)
+
+  let urlExt = '.png'
+  try {
+    const u = new URL(imageUrl)
+    const e = path.extname(u.pathname).toLowerCase()
+    if (['.png', '.jpg', '.jpeg', '.webp', '.gif'].includes(e)) urlExt = e
+  } catch {
+    // ignore URL parse errors; keep default
+  }
+  const finalPath = path.join(dir, `icon${urlExt}`)
+
+  const tmp = await downloadToTemp(imageUrl)
+  try {
+    await fsp.copyFile(tmp, finalPath)
+  } finally {
+    try { await fsp.unlink(tmp) } catch {}
+  }
+  return finalPath
+})
 
 // --------------------------- Data Model ---------------------------
 type ModMeta = {
@@ -226,6 +282,20 @@ async function writeModMeta(dir: string, meta: ModMeta) {
   return merged
 }
 
+function pickFirstImageFile(dir: string, preferredBaseName?: string): string | null {
+  try {
+    const files = fs.readdirSync(dir)
+    if (preferredBaseName) {
+      const preferred = files.find((f) => new RegExp(`^${preferredBaseName}\\.(png|jpe?g|webp)$`, 'i').test(f))
+      if (preferred && isFile(path.join(dir, preferred))) return path.join(dir, preferred)
+    }
+    const img = files.find((f) => /\.(png|jpe?g|webp)$/i.test(f) && isFile(path.join(dir, f)))
+    return img ? path.join(dir, img) : null
+  } catch {
+    return null
+  }
+}
+
 // --------------------------- IPC ---------------------------
 
 ipcMain.handle('settings:get', async () => {
@@ -270,6 +340,24 @@ ipcMain.handle('characters:list', async () => {
   } catch {
     return []
   }
+})
+
+ipcMain.handle('characters:listWithImages', async () => {
+  const { modsRoot, imagesRoot } = await readSettings()
+  if (!modsRoot) return []
+  let names: string[] = []
+  try {
+    const entries = await fsp.readdir(modsRoot)
+    names = entries.filter((n) => isDirectory(path.join(modsRoot, n)))
+  } catch {
+    names = []
+  }
+  const items = names.map((name) => {
+    const idir = imagesRoot ? path.join(imagesRoot, name) : null
+    const imgPath = idir ? pickFirstImageFile(idir, name) : null
+    return { name, imagePath: imgPath || undefined }
+  })
+  return items
 })
 
 ipcMain.handle('characters:add', async (_e, name: string) => {
@@ -412,3 +500,5 @@ ipcMain.handle('mods:updateFromUrl', async (_e, character: string, modName: stri
   try { await fsp.unlink(tmp) } catch {}
   return true
 })
+
+// Note: 'characters:updateImages' feature was removed intentionally.

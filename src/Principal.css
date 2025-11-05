@@ -7,6 +7,9 @@
 .field-row .label { color: var(--muted); }
 .field-row .path { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .modal .icon { background: transparent; font-size: 18px; padding: 4px 8px; }
+.modal input { background: #0e1320; border: 1px solid #232735; color: var(--text); padding: 8px 10px; border-radius: 8px; }
+.modal input::placeholder { color: #7f889a; }
+.modal input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px #2b76ff22; }
 :root {
   --bg: #0f1115;
   --panel: #151922;
@@ -62,6 +65,14 @@ body {
   z-index: 10;
 }
 
+/* Loading overlay shown on long update actions */
+.loading-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: grid; place-items: center; z-index: 200; }
+.loading-modal { width: 360px; max-width: calc(100vw - 40px); background: var(--panel); border: 1px solid #232735; border-radius: var(--radius); padding: 16px; display: grid; gap: 12px; }
+.loading-title { font-weight: 600; }
+.progress { height: 8px; background: #0e1320; border-radius: 8px; overflow: hidden; border: 1px solid #232735; }
+.progress .bar { height: 100%; width: 40%; background: linear-gradient(90deg, #4b7bff, #7aa7ff); animation: progressMove 1.2s linear infinite; }
+@keyframes progressMove { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+
 .mods-panel { grid-area: mods; padding: 12px; border-left: 1px solid #232735; overflow: auto; }
 .panel-header { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .panel-header h2, .panel-header h3 { margin: 0; }
@@ -71,6 +82,8 @@ body {
 .char-card { background: var(--panel); border: 1px solid #232735; border-radius: var(--radius); padding: 12px; display: grid; gap: 8px; cursor: pointer; justify-items: center; }
 .char-card:hover { border-color: #2b76ff66; }
 .char-card.active { outline: 2px solid var(--accent); }
+.char-thumb { width: 100%; height: 120px; background: #0e1320; border-radius: 8px; overflow: hidden; }
+.char-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .char-avatar { width: 56px; height: 56px; border-radius: 50%; background: #0e1320; display: grid; place-items: center; font-weight: 700; }
 .char-name { font-weight: 600; }
 

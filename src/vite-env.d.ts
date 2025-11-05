@@ -19,6 +19,11 @@ interface ModItem {
 	meta: ModMeta
 }
 
+interface CharacterItem {
+  name: string
+  imagePath?: string
+}
+
 declare global {
 	interface Window {
 		api: {
@@ -29,6 +34,7 @@ declare global {
 			selectArchive(): Promise<string | null>
 
 			listCharacters(): Promise<string[]>
+			listCharactersWithImages(): Promise<CharacterItem[]>
 			addCharacter(name: string): Promise<string>
 			normalizeCharacterNames(): Promise<{ changed: Array<{ from: string; to: string }>; skipped: string[] }>
 
@@ -39,7 +45,9 @@ declare global {
 			openModPage(character: string, modName: string): Promise<boolean>
 			openFolder(character?: string, modName?: string): Promise<boolean>
 			updateFromUrl(character: string, modName: string): Promise<boolean>
-					onFsChanged(cb: (payload: any) => void): () => void
+			readImageAsDataUrl(absPath: string): Promise<string | null>
+			saveImageFromUrl(character: string, url: string): Promise<string>
+				onFsChanged(cb: (payload: any) => void): () => void
 		}
 	}
 }

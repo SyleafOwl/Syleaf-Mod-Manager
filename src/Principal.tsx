@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import './Principal.css'
 import Actualizar from './Actualizar'
 import Configuracion from './Configuracion'
+import Agregar from './Agregar'
 
 type ModMeta = {
   name: string
@@ -23,14 +24,17 @@ type ModItem = {
 }
 
 type Settings = { modsRoot?: string; imagesRoot?: string }
+type CharacterItem = { name: string; imagePath?: string }
 
 function Principal() {
   const [settings, setSettings] = useState<Settings>({})
-  const [characters, setCharacters] = useState<string[]>([])
+  const [characters, setCharacters] = useState<CharacterItem[]>([])
   const [selectedChar, setSelectedChar] = useState<string>('')
   const [mods, setMods] = useState<ModItem[]>([])
+  const [charImgSrcs, setCharImgSrcs] = useState<Record<string, string>>({})
   const [showUpdatePanel, setShowUpdatePanel] = useState(false)
   const [showConfig, setShowConfig] = useState(false)
+  const [showAgregar, setShowAgregar] = useState(false)
   const hasRoot = useMemo(() => !!settings.modsRoot, [settings])
 
   useEffect(() => {
@@ -48,9 +52,18 @@ function Principal() {
   }, [selectedChar, hasRoot])
 
   async function refreshCharacters() {
-    const list = await window.api.listCharacters()
+    const list = await window.api.listCharactersWithImages()
     setCharacters(list)
-    if (list.length && !selectedChar) setSelectedChar(list[0])
+    if (list.length && !selectedChar) setSelectedChar(list[0].name)
+    // Load data URLs for images to avoid file:// restrictions in dev server
+    const entries = await Promise.all(list.map(async (c) => {
+      if (!c.imagePath) return [c.name, ''] as const
+      const dataUrl = await window.api.readImageAsDataUrl(c.imagePath)
+      return [c.name, dataUrl || ''] as const
+    }))
+    const map: Record<string, string> = {}
+    for (const [name, src] of entries) { if (src) map[name] = src }
+    setCharImgSrcs(map)
   }
 
   async function refreshMods(character: string) {
@@ -59,10 +72,11 @@ function Principal() {
   }
 
   async function refreshAll() {
-    const chars = await window.api.listCharacters()
+    const chars = await window.api.listCharactersWithImages()
     setCharacters(chars)
     let cur = selectedChar
-    if (!cur || !chars.includes(cur)) cur = chars[0] || ''
+    const names = chars.map(c => c.name)
+    if (!cur || !names.includes(cur)) cur = names[0] || ''
     setSelectedChar(cur)
     if (cur) setMods(await window.api.listMods(cur))
     else setMods([])
@@ -165,16 +179,21 @@ function Principal() {
         <div className="panel-header">
           <h2>Personajes</h2>
           <div className="spacer" />
+          <button onClick={() => setShowAgregar(true)} title="Agregar personaje">+ Añadir</button>
         </div>
         <div className="characters-grid">
           {characters.map((c) => (
             <div
-              key={c}
-              className={`char-card ${c === selectedChar ? 'active' : ''}`}
-              onClick={() => setSelectedChar(c)}
+              key={c.name}
+              className={`char-card ${c.name === selectedChar ? 'active' : ''}`}
+              onClick={() => setSelectedChar(c.name)}
             >
-              <div className="char-avatar">{c.charAt(0).toUpperCase()}</div>
-              <div className="char-name">{c}</div>
+              {charImgSrcs[c.name] ? (
+                <div className="char-thumb"><img src={charImgSrcs[c.name]} /></div>
+              ) : (
+                <div className="char-avatar">{c.name.charAt(0).toUpperCase()}</div>
+              )}
+              <div className="char-name">{c.name}</div>
             </div>
           ))}
           {characters.length === 0 && (
@@ -197,7 +216,7 @@ function Principal() {
               <div key={m.folder} className="mod-card">
                 <div className="mod-thumb" onClick={() => window.api.openFolder(selectedChar, m.folder)}>
                   {m.meta.image ? (
-                    <img src={`file://${m.dir.replace(/\\/g, '/')}/${m.meta.image}`} />
+                    <img src={`file:///${m.dir.replace(/\\/g, '/')}/${m.meta.image}`} />
                   ) : (
                     <div className="placeholder">Sin imagen</div>
                   )}
@@ -228,6 +247,16 @@ function Principal() {
             if (s.modsRoot !== prevRoot) {
               await refreshAll()
             }
+          }}
+        />
+      )}
+      {showAgregar && (
+        <Agregar
+          onClose={() => setShowAgregar(false)}
+          onAdded={async (name) => {
+            // Ensure we select the new character after adding
+            await refreshAll()
+            setSelectedChar(name)
           }}
         />
       )}

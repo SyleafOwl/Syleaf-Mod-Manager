@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('api', {
   selectArchive: () => ipcRenderer.invoke('dialog:selectArchive'),
 
   listCharacters: () => ipcRenderer.invoke('characters:list'),
+  listCharactersWithImages: () => ipcRenderer.invoke('characters:listWithImages'),
   addCharacter: (name: string) => ipcRenderer.invoke('characters:add', name),
   normalizeCharacterNames: () => ipcRenderer.invoke('characters:normalizeNames'),
 
@@ -19,6 +20,8 @@ contextBridge.exposeInMainWorld('api', {
   openModPage: (character: string, modName: string) => ipcRenderer.invoke('mods:openPage', character, modName),
   openFolder: (character?: string, modName?: string) => ipcRenderer.invoke('mods:openFolder', character, modName),
   updateFromUrl: (character: string, modName: string) => ipcRenderer.invoke('mods:updateFromUrl', character, modName),
+  readImageAsDataUrl: (absPath: string) => ipcRenderer.invoke('images:readDataUrl', absPath),
+  saveImageFromUrl: (character: string, url: string) => ipcRenderer.invoke('images:saveFromUrl', character, url),
   onFsChanged: (cb: (payload: any) => void) => {
     const handler = (_e: any, payload: any) => cb(payload)
     ipcRenderer.on('fs-changed', handler)

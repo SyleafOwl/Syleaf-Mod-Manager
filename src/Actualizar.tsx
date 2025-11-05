@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 type Props = {
   // Notify parent to refresh its data (characters/mods) after an action
@@ -8,6 +8,7 @@ type Props = {
 
 export default function Actualizar({ onAfterAction, onClose }: Props) {
   const ref = useRef<HTMLDivElement | null>(null)
+  const [loading] = useState(false)
 
   // Close on click outside
   useEffect(() => {
@@ -42,9 +43,8 @@ export default function Actualizar({ onAfterAction, onClose }: Props) {
   return (
     <div className="update-wrapper">
       <div ref={ref} className="update-panel">
-        <button onClick={handleRefreshFolders}>Actualizar Carpetas</button>
-        <button onClick={handleNormalizeNames}>Actualizar Nombres</button>
-        <button disabled title="Próximamente">Actualizar Imagen</button>
+        <button disabled={loading} onClick={handleRefreshFolders}>Actualizar Carpetas</button>
+        <button disabled={loading} onClick={handleNormalizeNames}>Actualizar Nombres</button>
       </div>
     </div>
   )
