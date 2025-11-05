@@ -230,20 +230,52 @@ function Principal() {
               onClick={() => setSelectedChar(c.name)}
             >
               {charImgSrcs[c.name] ? (
-                <div className="char-thumb">
-                  {(() => {
-                    const crop = charCrops[c.name]
-                    let style: any = undefined
-                    if (crop && crop.originalWidth > 0 && crop.originalHeight > 0) {
-                      const cx = crop.x + crop.width / 2
-                      const cy = crop.y + crop.height / 2
-                      const px = Math.max(0, Math.min(100, (cx / crop.originalWidth) * 100))
-                      const py = Math.max(0, Math.min(100, (cy / crop.originalHeight) * 100))
-                      style = { objectPosition: `${px}% ${py}%` }
-                    }
-                    return <img src={charImgSrcs[c.name]} style={style} />
-                  })()}
-                </div>
+                (() => {
+                  const crop = charCrops[c.name]
+                  const baseStyle: any = { width: 'var(--char-thumb-width)', height: 'var(--char-thumb-height)', borderRadius: 8, overflow: 'hidden', backgroundColor: '#0e1320' }
+                  if (crop && crop.originalWidth > 0 && crop.originalHeight > 0 && crop.width > 0 && crop.height > 0) {
+                    const varW = getComputedStyle(document.documentElement).getPropertyValue('--char-thumb-width')
+                    const varH = getComputedStyle(document.documentElement).getPropertyValue('--char-thumb-height')
+                    const containerW = parseFloat(varW) || 180
+                    const containerH = parseFloat(varH) || 135
+                    // scale so that the crop area fits exactly the container (keep decimals for precision)
+                    const scaleX = containerW / crop.width
+                    const scaleY = containerH / crop.height
+                    const scale = scaleX || scaleY || 1
+                    const bgW = crop.originalWidth * scale
+                    const bgH = crop.originalHeight * scale
+                    // center-based positioning: align crop center to container center
+                    const cx = crop.x + crop.width / 2
+                    const cy = crop.y + crop.height / 2
+                    const posX = containerW / 2 - (cx * scale)
+                    const posY = containerH / 2 - (cy * scale)
+                    return (
+                      <div
+                        className="char-thumb"
+                        style={{
+                          ...baseStyle,
+                          backgroundImage: `url(${charImgSrcs[c.name]})`,
+                          backgroundRepeat: 'no-repeat',
+                          backgroundSize: `${bgW}px ${bgH}px`,
+                          backgroundPosition: `${posX}px ${posY}px`,
+                        }}
+                      />
+                    )
+                  }
+                  // Fallback: centered cover
+                  return (
+                    <div
+                      className="char-thumb"
+                      style={{
+                        ...baseStyle,
+                        backgroundImage: `url(${charImgSrcs[c.name]})`,
+                        backgroundRepeat: 'no-repeat',
+                        backgroundSize: 'cover',
+                        backgroundPosition: '50% 50%'
+                      }}
+                    />
+                  )
+                })()
               ) : (
                 <div className="char-avatar">{c.name.charAt(0).toUpperCase()}</div>
               )}

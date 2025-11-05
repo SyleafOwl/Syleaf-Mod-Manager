@@ -20,8 +20,8 @@
   --danger: #ff6a6a;
   --radius: 10px;
   /* Tamaño de miniatura de personaje (mantener en sync con el cropper) */
-  --char-thumb-width: 160px;
-  --char-thumb-height: 120px;
+  --char-thumb-width: 180px;
+  --char-thumb-height: 135px;
 }
 
 body {
@@ -82,8 +82,8 @@ body {
 .panel-header h2, .panel-header h3 { margin: 0; }
 
 .characters-panel { grid-area: characters; padding: 16px; overflow: auto; }
-.characters-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--char-thumb-width), 1fr)); gap: 12px; }
-.char-card { background: var(--panel); border: 1px solid #232735; border-radius: var(--radius); padding: 12px; display: grid; gap: 8px; cursor: pointer; justify-items: center; }
+.characters-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--char-thumb-width) + 26px), 1fr)); gap: 12px; }
+.char-card { background: var(--panel); border: 1px solid #232735; border-radius: var(--radius); padding: 12px; display: grid; gap: 8px; cursor: pointer; justify-items: center; box-sizing: border-box; }
 .char-card:hover { border-color: #2b76ff66; }
 .char-card.active { outline: 2px solid var(--accent); }
 .char-thumb { width: var(--char-thumb-width); height: var(--char-thumb-height); background: #0e1320; border-radius: 8px; overflow: hidden; margin: 0 auto; }

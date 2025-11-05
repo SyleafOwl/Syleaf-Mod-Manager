@@ -13,8 +13,8 @@ type Props = {
 export default function Agregar({ onClose, onAdded }: Props) {
   const modalRef = useRef<HTMLDivElement | null>(null)
   // Vista de recorte (un poco más grande que 160x120 para comodidad visual)
-  const VIS_W = 240
-  const VIS_H = 180
+  const VIS_W = 360
+  const VIS_H = 270
   const [name, setName] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [imgOk, setImgOk] = useState(true)
