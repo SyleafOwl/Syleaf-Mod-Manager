@@ -156,7 +156,7 @@ export default function Editar({ currentName, onClose, onUpdated }: Props) {
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Soldier 11" />
           </div>
           <div className="field-row">
-            <div className="label">URL de imagen (solo vista)</div>
+            <div className="label">URL de imagen</div>
             <input
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}

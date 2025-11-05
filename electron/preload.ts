@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('api', {
   addCharacter: (name: string) => ipcRenderer.invoke('characters:add', name),
   renameCharacter: (oldName: string, newName: string) => ipcRenderer.invoke('characters:rename', oldName, newName),
   normalizeCharacterNames: () => ipcRenderer.invoke('characters:normalizeNames'),
+  deleteCharacter: (name: string) => ipcRenderer.invoke('characters:delete', name),
 
   listMods: (character: string) => ipcRenderer.invoke('mods:list', character),
   addModFromArchive: (character: string, archivePath: string, modName: string, meta?: any) => ipcRenderer.invoke('mods:addFromArchive', character, archivePath, modName, meta),

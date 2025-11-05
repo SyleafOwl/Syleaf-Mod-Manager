@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -42,10 +42,15 @@ function createWindow() {
     height: 800,
     minWidth: 1100,
     minHeight: 700,
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
+
+  // Remove the application menu and hide the menu bar entirely
+  try { Menu.setApplicationMenu(null) } catch {}
+  try { win.setMenuBarVisibility(false) } catch {}
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
@@ -533,6 +538,23 @@ ipcMain.handle('characters:normalizeNames', async () => {
   // Notify renderer to refresh
   win?.webContents.send('fs-changed', { root: modsRoot })
   return result
+})
+
+ipcMain.handle('characters:delete', async (_e, name: string) => {
+  const { modsRoot, imagesRoot } = await readSettings()
+  if (!modsRoot) throw new Error('Mods root not set')
+  if (!name?.trim()) throw new Error('Character name required')
+  const cmods = characterDir(modsRoot, name)
+  try {
+    await fsp.rm(cmods, { recursive: true, force: true })
+  } catch {}
+  if (imagesRoot) {
+    const cimgs = path.join(imagesRoot, name)
+    try { await fsp.rm(cimgs, { recursive: true, force: true }) } catch {}
+  }
+  // Notify renderer to refresh
+  try { win?.webContents.send('fs-changed', { root: modsRoot }) } catch {}
+  return true
 })
 
 ipcMain.handle('mods:list', async (_e, character: string) => {

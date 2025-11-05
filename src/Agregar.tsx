@@ -35,22 +35,24 @@ export default function Agregar({ onClose, onAdded }: Props) {
     return () => { document.removeEventListener('mousedown', onDocDown); document.removeEventListener('keydown', onKey) }
   }, [onClose])
 
-  // Debounced load of URL as a data URL (to avoid CORS tainting)
+  // Clear preview if URL becomes empty; preview is fetched manually with Enter
   useEffect(() => {
+    if (!imageUrl.trim()) { setSrcDataUrl(''); setImgOk(true) }
+  }, [imageUrl])
+
+  // Manual fetch of URL preview only when pressing Enter (no auto fetch on change)
+  async function fetchPreviewFromUrl() {
     const u = imageUrl.trim()
     if (!u) { setSrcDataUrl(''); setImgOk(true); return }
-    const t = setTimeout(async () => {
-      try {
-        const data = await window.api.fetchImageDataUrl(u)
-        setSrcDataUrl(data)
-        setImgOk(true)
-      } catch {
-        setImgOk(false)
-        setSrcDataUrl('')
-      }
-    }, 400)
-    return () => clearTimeout(t)
-  }, [imageUrl])
+    try {
+      const data = await window.api.fetchImageDataUrl(u)
+      setSrcDataUrl(data)
+      setImgOk(true)
+    } catch {
+      setImgOk(false)
+      setSrcDataUrl('')
+    }
+  }
 
   const onCropComplete = useCallback(async (_area: any, areaPixels: any) => {
     setCroppedArea(areaPixels)
@@ -150,10 +152,12 @@ export default function Agregar({ onClose, onAdded }: Props) {
             <input
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') fetchPreviewFromUrl() }}
               placeholder="https://.../icon.png"
               className="input-url"
             />
           </div>
+          <div className="muted" style={{ fontSize: 12 }}>Pulsa Enter en el campo URL para cargar la vista previa.</div>
           {!imgOk && imageUrl && (
             <div className="muted" style={{ color: '#d66', marginTop: 4 }}>No se pudo cargar la imagen desde la URL.</div>
           )}

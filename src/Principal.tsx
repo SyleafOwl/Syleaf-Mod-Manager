@@ -4,6 +4,7 @@ import Actualizar from './Actualizar'
 import Configuracion from './Configuracion'
 import Agregar from './Agregar'
 import Editar from './Editar'
+import Eliminar from './Eliminar'
 
 type ModMeta = {
   name: string
@@ -39,6 +40,7 @@ function Principal() {
   const [showConfig, setShowConfig] = useState(false)
   const [showAgregar, setShowAgregar] = useState(false)
   const [showEditar, setShowEditar] = useState(false)
+  const [showEliminar, setShowEliminar] = useState(false)
   const hasRoot = useMemo(() => !!settings.modsRoot, [settings])
 
   useEffect(() => {
@@ -221,6 +223,7 @@ function Principal() {
           <div className="spacer" />
           <button onClick={() => setShowAgregar(true)} title="Agregar personaje">+ Agregar</button>
           <button onClick={() => setShowEditar(true)} title="Editar personaje">✎ Editar</button>
+          <button className="danger" onClick={() => setShowEliminar(true)} title="Eliminar personaje" disabled={!selectedChar}>✖ Eliminar</button>
         </div>
         <div className="characters-grid">
           {characters.map((c) => (
@@ -353,6 +356,15 @@ function Principal() {
           onUpdated={async (newName) => {
             await refreshAll()
             setSelectedChar(newName)
+          }}
+        />
+      )}
+      {showEliminar && selectedChar && (
+        <Eliminar
+          character={selectedChar}
+          onClose={() => setShowEliminar(false)}
+          onDeleted={async () => {
+            await refreshAll()
           }}
         />
       )}

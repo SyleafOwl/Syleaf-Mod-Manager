@@ -38,6 +38,7 @@ declare global {
 			addCharacter(name: string): Promise<string>
 			renameCharacter(oldName: string, newName: string): Promise<{ changed: boolean }>
 			normalizeCharacterNames(): Promise<{ changed: Array<{ from: string; to: string }>; skipped: string[] }>
+			deleteCharacter(name: string): Promise<boolean>
 
 			listMods(character: string): Promise<ModItem[]>
 			addModFromArchive(character: string, archivePath: string, modName: string, meta?: Partial<ModMeta>): Promise<boolean>
