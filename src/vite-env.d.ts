@@ -36,6 +36,7 @@ declare global {
 			listCharacters(): Promise<string[]>
 			listCharactersWithImages(): Promise<CharacterItem[]>
 			addCharacter(name: string): Promise<string>
+			renameCharacter(oldName: string, newName: string): Promise<{ changed: boolean }>
 			normalizeCharacterNames(): Promise<{ changed: Array<{ from: string; to: string }>; skipped: string[] }>
 
 			listMods(character: string): Promise<ModItem[]>
@@ -46,7 +47,10 @@ declare global {
 			openFolder(character?: string, modName?: string): Promise<boolean>
 			updateFromUrl(character: string, modName: string): Promise<boolean>
 			readImageAsDataUrl(absPath: string): Promise<string | null>
-			saveImageFromUrl(character: string, url: string): Promise<string>
+			saveImageFromUrl(character: string, url: string, crop?: any): Promise<string>
+			fetchImageDataUrl(url: string): Promise<string>
+			saveImageFromDataUrl(character: string, dataUrl: string, sourceUrl?: string, crop?: any): Promise<string>
+			getCharacterInfo(character: string): Promise<{ imagePath: string | null; url: string | null; crop?: any }>
 				onFsChanged(cb: (payload: any) => void): () => void
 		}
 	}

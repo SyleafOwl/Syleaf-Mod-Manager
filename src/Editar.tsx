@@ -1,27 +1,74 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Cropper from 'react-easy-crop'
 
-// Panel to add a new Character folder
-// Shows a live image preview from a URL (not persisted),
-// a name input for the character folder, and Add/Cancel actions.
-
 type Props = {
+  currentName: string
   onClose: () => void
-  onAdded?: (name: string) => void | Promise<void>
+  onUpdated?: (newName: string) => void | Promise<void>
 }
 
-export default function Agregar({ onClose, onAdded }: Props) {
+export default function Editar({ currentName, onClose, onUpdated }: Props) {
   const modalRef = useRef<HTMLDivElement | null>(null)
   // Vista de recorte (un poco más grande que 160x120 para comodidad visual)
   const VIS_W = 240
   const VIS_H = 180
-  const [name, setName] = useState('')
+  const [name, setName] = useState(currentName)
   const [imageUrl, setImageUrl] = useState('')
   const [imgOk, setImgOk] = useState(true)
+  // Keep a source data URL for cropping (from saved image or fetched URL)
   const [srcDataUrl, setSrcDataUrl] = useState<string>('')
   const [crop, setCrop] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedArea, setCroppedArea] = useState<{ width: number; height: number; x: number; y: number } | null>(null)
+  
+
+  useEffect(() => { setName(currentName) }, [currentName])
+
+  // Load existing DB info (image + url) for this character
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        const info = await window.api.getCharacterInfo(currentName)
+        if (cancelled) return
+        if (info.url) setImageUrl(info.url)
+        if (info.imagePath) {
+          const data = await window.api.readImageAsDataUrl(info.imagePath)
+          if (!cancelled && data) setSrcDataUrl(data)
+        }
+      } catch {}
+    }
+    load()
+    return () => { cancelled = true }
+  }, [currentName])
+
+  // Manual fetch of URL preview only when pressing Enter (no auto fetch on change)
+  async function fetchPreviewFromUrl() {
+    const u = imageUrl.trim()
+    if (!u) { setImgOk(true); return }
+    try {
+      const data = await window.api.fetchImageDataUrl(u)
+      setSrcDataUrl(data)
+      setImgOk(true)
+    } catch {
+      setImgOk(false)
+    }
+  }
+
+  const onCropComplete = useCallback(async (_area: any, areaPixels: any) => {
+    setCroppedArea(areaPixels)
+  }, [])
+
+  // Build crop metadata without cropping the image (we will save the full image)
+  async function buildCropMeta(imageSrc: string, area: { x: number; y: number; width: number; height: number }) {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image()
+      i.onload = () => resolve(i)
+      i.onerror = reject
+      i.src = imageSrc
+    })
+    return { x: area.x, y: area.y, width: area.width, height: area.height, originalWidth: img.naturalWidth, originalHeight: img.naturalHeight, zoom }
+  }
 
   useEffect(() => {
     function onDocDown(e: MouseEvent) {
@@ -35,69 +82,38 @@ export default function Agregar({ onClose, onAdded }: Props) {
     return () => { document.removeEventListener('mousedown', onDocDown); document.removeEventListener('keydown', onKey) }
   }, [onClose])
 
-  // Debounced load of URL as a data URL (to avoid CORS tainting)
-  useEffect(() => {
-    const u = imageUrl.trim()
-    if (!u) { setSrcDataUrl(''); setImgOk(true); return }
-    const t = setTimeout(async () => {
-      try {
-        const data = await window.api.fetchImageDataUrl(u)
-        setSrcDataUrl(data)
-        setImgOk(true)
-      } catch {
-        setImgOk(false)
-        setSrcDataUrl('')
-      }
-    }, 400)
-    return () => clearTimeout(t)
-  }, [imageUrl])
-
-  const onCropComplete = useCallback(async (_area: any, areaPixels: any) => {
-    setCroppedArea(areaPixels)
-  }, [])
-
-  // Build crop metadata using the original image size (we will save the full image)
-  async function buildCropMeta(imageSrc: string, area: { x: number; y: number; width: number; height: number }) {
-    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const i = new Image()
-      i.onload = () => resolve(i)
-      i.onerror = reject
-      i.src = imageSrc
-    })
-    return { x: area.x, y: area.y, width: area.width, height: area.height, originalWidth: img.naturalWidth, originalHeight: img.naturalHeight, zoom }
-  }
-
-  async function handleAdd() {
-    const n = name.trim()
-    if (!n) return
+  async function handleUpdate() {
+    const oldName = currentName
+    const newName = name.trim()
+    if (!newName) return
     try {
-      // Create mods folder
-      await window.api.addCharacter(n)
-      // Save image (FULL image; crop meta is stored in the .txt)
+      if (newName !== oldName) {
+        await window.api.renameCharacter(oldName, newName)
+      }
       const u = imageUrl.trim()
       try {
         if (srcDataUrl && croppedArea) {
+          // Save FULL image and persist crop meta in JSON
           const crop = await buildCropMeta(srcDataUrl, croppedArea)
-          await window.api.saveImageFromDataUrl(n, srcDataUrl, u || undefined, crop)
+          await window.api.saveImageFromDataUrl(newName, srcDataUrl, u || undefined, crop)
         } else if (u) {
-          await window.api.saveImageFromUrl(n, u)
+          // Save full image from URL; no crop meta if none chosen
+          await window.api.saveImageFromUrl(newName, u)
         }
       } catch (e: any) {
-        alert('Se creó la carpeta del personaje, pero no se pudo guardar la imagen.\n' + (e?.message || e))
+        alert('Se actualizó el nombre, pero no se pudo guardar la imagen.\n' + (e?.message || e))
       }
-      await onAdded?.(n)
+      await onUpdated?.(newName)
     } finally {
       onClose()
     }
   }
 
-  // Removed explicit download/save triggers; saving happens on Agregar
-
   return (
     <div className="overlay">
       <div ref={modalRef} className="modal">
         <div className="modal-header">
-          <div className="modal-title">Agregar Personaje</div>
+          <div className="modal-title">Editar Personaje</div>
           <button className="icon" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
@@ -127,7 +143,7 @@ export default function Agregar({ onClose, onAdded }: Props) {
                   showGrid={false}
                 />
               ) : (
-                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>Sin vista previa</div>
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>Vista previa</div>
               )}
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -135,32 +151,27 @@ export default function Agregar({ onClose, onAdded }: Props) {
             </div>
             <div className="muted" style={{ fontSize: 12, textAlign: 'center' }}>Recuadro 4:3 (mismo aspecto que Personajes). Puedes desplazar y ampliar.</div>
           </div>
-          {/* Name input */}
           <div className="field-row">
             <div className="label">Nombre de carpeta</div>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ej. Soldier 11"
-            />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Soldier 11" />
           </div>
-          {/* Image URL input (se guarda junto a la imagen recortada) */}
           <div className="field-row">
-            <div className="label">URL de imagen</div>
+            <div className="label">URL de imagen (solo vista)</div>
             <input
               value={imageUrl}
               onChange={(e) => setImageUrl(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') fetchPreviewFromUrl() }}
               placeholder="https://.../icon.png"
               className="input-url"
             />
           </div>
+          <div className="muted" style={{ fontSize: 12 }}>Pulsa Enter en el campo URL para cargar la vista previa.</div>
           {!imgOk && imageUrl && (
             <div className="muted" style={{ color: '#d66', marginTop: 4 }}>No se pudo cargar la imagen desde la URL.</div>
           )}
-          {/* No Enter-to-save hint; se guarda junto a un .txt en DataBase al Agregar */}
           <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
             <button className="secondary" onClick={onClose}>Cancelar</button>
-            <button onClick={handleAdd} disabled={!name.trim()}>Agregar</button>
+            <button onClick={handleUpdate} disabled={!name.trim()}>Actualizar</button>
           </div>
         </div>
       </div>

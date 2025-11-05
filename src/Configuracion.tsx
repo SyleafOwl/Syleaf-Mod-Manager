@@ -56,7 +56,7 @@ export default function Configuracion({ onSettingsChanged, onClose }: Props) {
             <button onClick={changeModsRoot}>Cambiar…</button>
           </div>
           <div className="field-row">
-            <div className="label">Carpeta de Imágenes</div>
+            <div className="label">Carpeta DataBase</div>
             <div className="path">{settings.imagesRoot || 'No seleccionada'}</div>
             <button onClick={changeImagesRoot}>Cambiar…</button>
           </div>

@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import os from 'node:os'
 import https from 'node:https'
+import http from 'node:http'
 import { spawn } from 'node:child_process'
 
 const require = createRequire(import.meta.url)
@@ -207,8 +208,37 @@ ipcMain.handle('images:readDataUrl', async (_e, absPath: string) => {
   }
 })
 
+// Fetch an image from URL and return a data URL (avoids renderer CORS issues)
+ipcMain.handle('images:fetchAsDataUrl', async (_e, imageUrl: string) => {
+  async function fetchBuffer(u: string, redirectDepth = 3): Promise<{ buf: Buffer; mime: string }> {
+    return await new Promise((resolve, reject) => {
+      let client: typeof https | typeof http = https
+      try { const proto = new URL(u).protocol; client = proto === 'http:' ? http : https } catch {}
+      client.get(u, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } }, (res) => {
+        const status = res.statusCode || 0
+        if (status >= 300 && status < 400 && res.headers.location) {
+          if (redirectDepth <= 0) return reject(new Error('Too many redirects'))
+          fetchBuffer(res.headers.location, redirectDepth - 1).then(resolve, reject)
+          return
+        }
+        if (status !== 200) return reject(new Error(`HTTP ${status}`))
+        const mime = (res.headers['content-type'] || 'application/octet-stream').split(';')[0]
+        const chunks: Buffer[] = []
+        res.on('data', (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)))
+        res.on('end', () => resolve({ buf: Buffer.concat(chunks), mime }))
+        res.on('error', reject)
+      }).on('error', reject)
+    })
+  }
+
+  const { buf, mime } = await fetchBuffer(imageUrl)
+  const safeMime = /^image\//.test(mime) ? mime : 'image/png'
+  const base64 = buf.toString('base64')
+  return `data:${safeMime};base64,${base64}`
+})
+
 // Save an image from URL into imagesRoot/<character>/icon.ext
-ipcMain.handle('images:saveFromUrl', async (_e, character: string, imageUrl: string) => {
+ipcMain.handle('images:saveFromUrl', async (_e, character: string, imageUrl: string, crop?: any) => {
   const { imagesRoot } = await readSettings()
   if (!imagesRoot) throw new Error('Images root not set')
   if (!character?.trim()) throw new Error('Character name required')
@@ -224,7 +254,9 @@ ipcMain.handle('images:saveFromUrl', async (_e, character: string, imageUrl: str
   } catch {
     // ignore URL parse errors; keep default
   }
-  const finalPath = path.join(dir, `icon${urlExt}`)
+  // Save with same name as the character folder (requested behavior)
+  const safeName = character
+  const finalPath = path.join(dir, `${safeName}${urlExt}`)
 
   const tmp = await downloadToTemp(imageUrl)
   try {
@@ -232,7 +264,69 @@ ipcMain.handle('images:saveFromUrl', async (_e, character: string, imageUrl: str
   } finally {
     try { await fsp.unlink(tmp) } catch {}
   }
+  // Also persist the source URL and optional crop as JSON in <Character>.txt for editing reference
+  const urlTxt = path.join(dir, `${safeName}.txt`)
+  const payload: any = { url: imageUrl }
+  if (crop) payload.crop = crop
+  try { await fsp.writeFile(urlTxt, JSON.stringify(payload, null, 2), 'utf-8') } catch {}
   return finalPath
+})
+
+// Save an image provided as a data URL (PNG/JPEG/WebP) to DataBase and optionally persist the source URL in a .txt
+ipcMain.handle('images:saveFromDataUrl', async (_e, character: string, dataUrl: string, sourceUrl?: string, crop?: any) => {
+  const { imagesRoot } = await readSettings()
+  if (!imagesRoot) throw new Error('Images root not set')
+  if (!character?.trim()) throw new Error('Character name required')
+  if (!dataUrl?.startsWith('data:')) throw new Error('Invalid data URL')
+
+  const dir = path.join(imagesRoot, character)
+  ensureDirSync(dir)
+
+  const m = /^data:(.+?);base64,(.*)$/.exec(dataUrl)
+  if (!m) throw new Error('Unsupported data URL')
+  const mime = m[1]
+  const b64 = m[2]
+  const buf = Buffer.from(b64, 'base64')
+
+  let ext = '.png'
+  if (mime.includes('jpeg')) ext = '.jpg'
+  else if (mime.includes('webp')) ext = '.webp'
+  else if (mime.includes('gif')) ext = '.gif'
+
+  const finalPath = path.join(dir, `${character}${ext}`)
+  await fsp.writeFile(finalPath, buf)
+  if (sourceUrl || crop) {
+    const payload: any = {}
+    if (sourceUrl) payload.url = sourceUrl
+    if (crop) payload.crop = crop
+    try { await fsp.writeFile(path.join(dir, `${character}.txt`), JSON.stringify(payload, null, 2), 'utf-8') } catch {}
+  }
+  return finalPath
+})
+
+// Fetch DataBase info for a character: image path and saved URL
+ipcMain.handle('database:getCharacterInfo', async (_e, character: string) => {
+  const { imagesRoot } = await readSettings()
+  if (!imagesRoot) return { imagePath: null, url: null }
+  const dir = path.join(imagesRoot, character)
+  const imagePath = pickFirstImageFile(dir, character)
+  let url: string | null = null
+  let crop: any = null
+  try {
+    const raw = await fsp.readFile(path.join(dir, `${character}.txt`), 'utf-8')
+    try {
+      const j = JSON.parse(raw)
+      if (j && typeof j === 'object') {
+        url = (j.url || '').trim() || null
+        if (j.crop && typeof j.crop === 'object') crop = j.crop
+      } else {
+        url = String(raw).trim()
+      }
+    } catch {
+      url = String(raw).trim()
+    }
+  } catch {}
+  return { imagePath, url, crop }
 })
 
 // --------------------------- Data Model ---------------------------
@@ -366,6 +460,33 @@ ipcMain.handle('characters:add', async (_e, name: string) => {
   const dir = characterDir(modsRoot, name)
   await fsp.mkdir(dir, { recursive: true })
   return name
+})
+
+ipcMain.handle('characters:rename', async (_e, oldName: string, newName: string) => {
+  const { modsRoot } = await readSettings()
+  if (!modsRoot) throw new Error('Mods root not set')
+  const from = characterDir(modsRoot, oldName)
+  const to = characterDir(modsRoot, newName)
+  if (!isDirectory(from)) throw new Error('Source character does not exist')
+  if (from === to) return { changed: false }
+  try {
+    // Windows case-only rename workaround
+    const caseOnly = oldName.toLowerCase() === newName.toLowerCase()
+    if (caseOnly) {
+      const temp = path.join(modsRoot, `${oldName}__tmp__${Date.now()}`)
+      await fsp.rename(from, temp)
+      await fsp.rename(temp, to)
+    } else {
+      // if target exists, error
+      try { await fsp.access(to); throw new Error('Target already exists') } catch {}
+      await fsp.rename(from, to)
+    }
+    // Notify renderer to refresh
+    win?.webContents.send('fs-changed', { root: modsRoot })
+    return { changed: true }
+  } catch (e) {
+    throw e
+  }
 })
 
 ipcMain.handle('characters:normalizeNames', async () => {

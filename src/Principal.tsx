@@ -3,6 +3,7 @@ import './Principal.css'
 import Actualizar from './Actualizar'
 import Configuracion from './Configuracion'
 import Agregar from './Agregar'
+import Editar from './Editar'
 
 type ModMeta = {
   name: string
@@ -25,6 +26,7 @@ type ModItem = {
 
 type Settings = { modsRoot?: string; imagesRoot?: string }
 type CharacterItem = { name: string; imagePath?: string }
+type CropMeta = { x: number; y: number; width: number; height: number; originalWidth: number; originalHeight: number; zoom?: number }
 
 function Principal() {
   const [settings, setSettings] = useState<Settings>({})
@@ -32,9 +34,11 @@ function Principal() {
   const [selectedChar, setSelectedChar] = useState<string>('')
   const [mods, setMods] = useState<ModItem[]>([])
   const [charImgSrcs, setCharImgSrcs] = useState<Record<string, string>>({})
+  const [charCrops, setCharCrops] = useState<Record<string, CropMeta | undefined>>({})
   const [showUpdatePanel, setShowUpdatePanel] = useState(false)
   const [showConfig, setShowConfig] = useState(false)
   const [showAgregar, setShowAgregar] = useState(false)
+  const [showEditar, setShowEditar] = useState(false)
   const hasRoot = useMemo(() => !!settings.modsRoot, [settings])
 
   useEffect(() => {
@@ -64,6 +68,19 @@ function Principal() {
     const map: Record<string, string> = {}
     for (const [name, src] of entries) { if (src) map[name] = src }
     setCharImgSrcs(map)
+
+    // Load crop metadata per character
+    const cropEntries = await Promise.all(list.map(async (c) => {
+      try {
+        const info = await window.api.getCharacterInfo(c.name)
+        return [c.name, info.crop as CropMeta | undefined] as const
+      } catch {
+        return [c.name, undefined] as const
+      }
+    }))
+    const cropMap: Record<string, CropMeta | undefined> = {}
+    for (const [name, crop] of cropEntries) { cropMap[name] = crop }
+    setCharCrops(cropMap)
   }
 
   async function refreshMods(character: string) {
@@ -74,6 +91,29 @@ function Principal() {
   async function refreshAll() {
     const chars = await window.api.listCharactersWithImages()
     setCharacters(chars)
+    // Also rebuild image data URLs for preview
+    const entries = await Promise.all(chars.map(async (c) => {
+      if (!c.imagePath) return [c.name, ''] as const
+      const dataUrl = await window.api.readImageAsDataUrl(c.imagePath)
+      return [c.name, dataUrl || ''] as const
+    }))
+    const map: Record<string, string> = {}
+    for (const [name, src] of entries) { if (src) map[name] = src }
+    setCharImgSrcs(map)
+
+    // Refresh crop metadata
+    const cropEntries = await Promise.all(chars.map(async (c) => {
+      try {
+        const info = await window.api.getCharacterInfo(c.name)
+        return [c.name, info.crop as CropMeta | undefined] as const
+      } catch {
+        return [c.name, undefined] as const
+      }
+    }))
+    const cropMap: Record<string, CropMeta | undefined> = {}
+    for (const [name, crop] of cropEntries) { cropMap[name] = crop }
+    setCharCrops(cropMap)
+
     let cur = selectedChar
     const names = chars.map(c => c.name)
     if (!cur || !names.includes(cur)) cur = names[0] || ''
@@ -179,7 +219,8 @@ function Principal() {
         <div className="panel-header">
           <h2>Personajes</h2>
           <div className="spacer" />
-          <button onClick={() => setShowAgregar(true)} title="Agregar personaje">+ Añadir</button>
+          <button onClick={() => setShowAgregar(true)} title="Agregar personaje">+ Agregar</button>
+          <button onClick={() => setShowEditar(true)} title="Editar personaje">✎ Editar</button>
         </div>
         <div className="characters-grid">
           {characters.map((c) => (
@@ -189,7 +230,20 @@ function Principal() {
               onClick={() => setSelectedChar(c.name)}
             >
               {charImgSrcs[c.name] ? (
-                <div className="char-thumb"><img src={charImgSrcs[c.name]} /></div>
+                <div className="char-thumb">
+                  {(() => {
+                    const crop = charCrops[c.name]
+                    let style: any = undefined
+                    if (crop && crop.originalWidth > 0 && crop.originalHeight > 0) {
+                      const cx = crop.x + crop.width / 2
+                      const cy = crop.y + crop.height / 2
+                      const px = Math.max(0, Math.min(100, (cx / crop.originalWidth) * 100))
+                      const py = Math.max(0, Math.min(100, (cy / crop.originalHeight) * 100))
+                      style = { objectPosition: `${px}% ${py}%` }
+                    }
+                    return <img src={charImgSrcs[c.name]} style={style} />
+                  })()}
+                </div>
               ) : (
                 <div className="char-avatar">{c.name.charAt(0).toUpperCase()}</div>
               )}
@@ -207,7 +261,7 @@ function Principal() {
         <div className="panel-header">
           <h3>Mods {selectedChar ? `· ${selectedChar}` : ''}</h3>
           <div className="spacer" />
-          <button onClick={addMod} disabled={!selectedChar}>+ Añadir Mod (ZIP/7z)</button>
+          <button onClick={addMod} disabled={!selectedChar}>+ Agregar Mod (ZIP/7z)</button>
         </div>
         {!selectedChar && <div className="empty-hint">Selecciona un personaje a la izquierda.</div>}
         {selectedChar && (
@@ -257,6 +311,16 @@ function Principal() {
             // Ensure we select the new character after adding
             await refreshAll()
             setSelectedChar(name)
+          }}
+        />
+      )}
+      {showEditar && selectedChar && (
+        <Editar
+          currentName={selectedChar}
+          onClose={() => setShowEditar(false)}
+          onUpdated={async (newName) => {
+            await refreshAll()
+            setSelectedChar(newName)
           }}
         />
       )}
