@@ -43,7 +43,7 @@ export default function EliminarMod({ character, modName, onClose, onDeleted }: 
             <div style={{ fontWeight: 600, color: '#ffacac' }}>Advertencia</div>
             <div className="muted">Se eliminará únicamente este mod del personaje, incluyendo:</div>
             <ul style={{ margin: '0 0 0 18px', padding: 0 }}>
-              <li>El archivo ZIP/7z copiado en la carpeta del mod.</li>
+              <li>El archivo ZIP/7z/RAR copiado en la carpeta del mod.</li>
               <li>La imagen de vista previa guardada para este mod.</li>
               <li>Los metadatos del mod (por ejemplo, URL de la página y URL/imagen asociada).</li>
             </ul>

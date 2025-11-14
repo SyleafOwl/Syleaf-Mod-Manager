@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 // Modal to finalize adding a mod after copying the archive
-// - Shows read-only archive file name (zip/7z)
+// - Shows read-only archive file name (zip/7z/rar)
 // - Lets user enter Mod URL (pageUrl)
 // - Lets user enter Image URL and preview it (no crop)
 // - On save, writes preview image into mod folder and updates mod.json
@@ -127,7 +127,7 @@ export default function AgregarMod({ character, archivePath, archiveFileName, on
           {/* Internal mod name (editable) */}
           <div className="field-row">
             <div className="label">Nombre del Mod</div>
-            <input value={internalName} onChange={(e) => setInternalName(e.target.value)} placeholder="Carpeta o archivo principal dentro del ZIP" />
+            <input value={internalName} onChange={(e) => setInternalName(e.target.value)} placeholder="Carpeta o archivo principal dentro del archivo" />
           </div>
 
           {/* Archive name (read-only) */}

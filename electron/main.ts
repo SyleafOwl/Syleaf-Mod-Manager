@@ -15,6 +15,21 @@ const extractZip = require('extract-zip') as (src: string, opts: { dir: string }
 const sevenBin = require('7zip-bin')
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+function getSevenBinary(): string {
+  try {
+    if (process.platform === 'win32') {
+      const candidates = [
+        path.join(process.env['ProgramFiles'] || 'C:/Program Files', '7-Zip', '7z.exe'),
+        path.join(process.env['ProgramFiles(x86)'] || 'C:/Program Files (x86)', '7-Zip', '7z.exe'),
+      ]
+      for (const p of candidates) {
+        try { if (fs.existsSync(p)) return p } catch {}
+      }
+    }
+  } catch {}
+  return sevenBin.path7za as string
+}
+
 // The built directory structure
 //
 // ├─┬─┬ dist
@@ -181,9 +196,9 @@ async function extractArchive(archivePath: string, destDir: string) {
     return
   }
   // Use 7zip for other formats
-  const sevenPath = sevenBin.path7za as string
+  const sevenPath = getSevenBinary()
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(sevenPath, ['x', archivePath, `-o${destDir}`, '-y'])
+    const child = spawn(sevenPath, ['x', archivePath, `-o"${destDir}"`, '-y'])
     child.on('error', reject)
     child.on('close', (code) => (code === 0 ? resolve() : reject(new Error('7zip exit ' + code))))
   })
@@ -265,9 +280,9 @@ ipcMain.handle('mods:getPreviewDataUrl', async (_e, character: string, modName: 
     // Extract preview.* to temp dir
     const tmpDir = path.join(os.tmpdir(), `zzzmm_prev_${Date.now()}_${Math.random().toString(36).slice(2)}`)
     await fsp.mkdir(tmpDir, { recursive: true })
-    const sevenPath = sevenBin.path7za as string
+    const sevenPath = getSevenBinary()
     await new Promise<void>((resolve) => {
-      const child = spawn(sevenPath, ['x', archivePath, 'preview.*', `-o${tmpDir}`, '-y'])
+      const child = spawn(sevenPath, ['x', archivePath, 'preview.*', `-o"${tmpDir}"`, '-y'])
       child.on('error', () => resolve())
       child.on('close', () => resolve())
     })
@@ -320,15 +335,15 @@ ipcMain.handle('mods:getData', async (_e, character: string, modName: string) =>
   const archivePath = path.join(cdir, target)
   const tmpDir = path.join(os.tmpdir(), `zzzmm_data_${Date.now()}_${Math.random().toString(36).slice(2)}`)
     await fsp.mkdir(tmpDir, { recursive: true })
-    const sevenPath = sevenBin.path7za as string
+    const sevenPath = getSevenBinary()
     // Try extracting 'data.txt' first, then legacy 'data'
     await new Promise<void>((resolve) => {
-      const child = spawn(sevenPath, ['x', archivePath, 'data.txt', `-o${tmpDir}`, '-y'])
+      const child = spawn(sevenPath, ['x', archivePath, 'data.txt', `-o"${tmpDir}"`, '-y'])
       child.on('error', () => resolve())
       child.on('close', () => resolve())
     })
     await new Promise<void>((resolve) => {
-      const child = spawn(sevenPath, ['x', archivePath, 'data', `-o${tmpDir}`, '-y'])
+      const child = spawn(sevenPath, ['x', archivePath, 'data', `-o"${tmpDir}"`, '-y'])
       child.on('error', () => resolve())
       child.on('close', () => resolve())
     })
@@ -377,7 +392,7 @@ ipcMain.handle('mods:setData', async (_e, character: string, modName: string, pa
   await fsp.mkdir(tmpDir, { recursive: true })
   const dataFile = path.join(tmpDir, 'data.txt')
   await fsp.writeFile(dataFile, JSON.stringify({ pageUrl: payload.pageUrl || undefined, imageUrl: payload.imageUrl || undefined }, null, 2), 'utf-8')
-  const sevenPath = sevenBin.path7za as string
+  const sevenPath = getSevenBinary()
   await new Promise<void>((resolve) => {
     const child = spawn(sevenPath, ['d', archivePath, 'data'])
     child.on('close', () => resolve())
@@ -461,7 +476,7 @@ ipcMain.handle('mods:renamePrimaryInternal', async (_e, character: string, modNa
   const archPath = path.join(cdir, target)
   const current = await getPrimaryInternalNameFromArchive(archPath)
   if (!current || current === newInternalName) return { changed: false }
-  const sevenPath = sevenBin.path7za as string
+  const sevenPath = getSevenBinary()
   await new Promise<void>((resolve, reject) => {
     const child = spawn(sevenPath, ['rn', archPath, current, newInternalName])
     child.on('error', reject)
@@ -663,7 +678,7 @@ function pickFirstImageFile(dir: string, preferredBaseName?: string): string | n
 // Helper: get primary internal name using machine-readable 7z output (-slt).
 // Picks the first top-level entry excluding preview.* and data/data.txt. Prefers directories over files.
 async function getPrimaryInternalNameFromArchive(archivePath: string): Promise<string | null> {
-  const sevenPath = sevenBin.path7za as string
+  const sevenPath = getSevenBinary()
   try {
     const output: string = await new Promise((resolve, reject) => {
       const child = spawn(sevenPath, ['l', '-slt', archivePath])
@@ -1231,8 +1246,8 @@ ipcMain.handle('mods:saveImageFromDataUrl', async (_e, character: string, modNam
   }
   // Find the target archive (prefer enabled)
   const files = await fsp.readdir(cdir)
-  const target = files.find((f) => /\.(zip|7z)$/i.test(f) && f.replace(/^DISABLED_/i, '').replace(/\.(zip|7z)$/i, '').toLowerCase() === modName.toLowerCase())
-    || files.find((f) => /\.(zip|7z)$/i.test(f) && f.toLowerCase().includes(modName.toLowerCase()))
+  const target = files.find((f) => /\.(zip|7z|rar)$/i.test(f) && f.replace(/^DISABLED_/i, '').replace(/\.(zip|7z|rar)$/i, '').toLowerCase() === modName.toLowerCase())
+    || files.find((f) => /\.(zip|7z|rar)$/i.test(f) && f.toLowerCase().includes(modName.toLowerCase()))
   if (!target) throw new Error('Archive not found for mod')
   const archivePath = path.join(cdir, target)
   // Write temp preview file with the desired name
@@ -1241,7 +1256,7 @@ ipcMain.handle('mods:saveImageFromDataUrl', async (_e, character: string, modNam
   const tmpFile = path.join(tmpDir, `preview${ext}`)
   await fsp.writeFile(tmpFile, buf)
   // Add/update inside archive using 7z
-  const sevenPath = sevenBin.path7za as string
+  const sevenPath = getSevenBinary()
   await new Promise<void>((resolve, reject) => {
     const child = spawn(sevenPath, ['a', archivePath, 'preview' + ext, '-y'], { cwd: tmpDir })
     child.on('error', reject)
@@ -1274,8 +1289,8 @@ ipcMain.handle('mods:saveImageFromUrl', async (_e, character: string, modName: s
   }
   // Find target archive
   const files = await fsp.readdir(cdir)
-  const target = files.find((f) => /\.(zip|7z)$/i.test(f) && f.replace(/^DISABLED_/i, '').replace(/\.(zip|7z)$/i, '').toLowerCase() === modName.toLowerCase())
-    || files.find((f) => /\.(zip|7z)$/i.test(f) && f.toLowerCase().includes(modName.toLowerCase()))
+  const target = files.find((f) => /\.(zip|7z|rar)$/i.test(f) && f.replace(/^DISABLED_/i, '').replace(/\.(zip|7z|rar)$/i, '').toLowerCase() === modName.toLowerCase())
+    || files.find((f) => /\.(zip|7z|rar)$/i.test(f) && f.toLowerCase().includes(modName.toLowerCase()))
   if (!target) throw new Error('Archive not found for mod')
   const archivePath = path.join(cdir, target)
   // Place tmp image with desired name in a temp dir then add via 7z
@@ -1284,7 +1299,7 @@ ipcMain.handle('mods:saveImageFromUrl', async (_e, character: string, modName: s
   const tmpImg = path.join(tmpDir, `preview${urlExt}`)
   await fsp.copyFile(tmp, tmpImg)
   try { await fsp.unlink(tmp) } catch {}
-  const sevenPath = sevenBin.path7za as string
+  const sevenPath = getSevenBinary()
   await new Promise<void>((resolve, reject) => {
     const child = spawn(sevenPath, ['a', archivePath, path.basename(tmpImg), '-y'], { cwd: tmpDir })
     child.on('error', reject)
@@ -1354,15 +1369,15 @@ ipcMain.handle('mods:openPage', async (_e, character: string, modName: string) =
       const archPath = path.join(cdir, target)
       const tmpDir = path.join(os.tmpdir(), `zzzmm_open_${Date.now()}_${Math.random().toString(36).slice(2)}`)
       await fsp.mkdir(tmpDir, { recursive: true })
-      const sevenPath = sevenBin.path7za as string
+      const sevenPath = getSevenBinary()
       // Try both data.txt and legacy data
       await new Promise<void>((resolve) => {
-        const child = spawn(sevenPath, ['x', archPath, 'data.txt', `-o${tmpDir}`, '-y'])
+        const child = spawn(sevenPath, ['x', archPath, 'data.txt', `-o"${tmpDir}"`, '-y'])
         child.on('error', () => resolve())
         child.on('close', () => resolve())
       })
       await new Promise<void>((resolve) => {
-        const child = spawn(sevenPath, ['x', archPath, 'data', `-o${tmpDir}`, '-y'])
+        const child = spawn(sevenPath, ['x', archPath, 'data', `-o"${tmpDir}"`, '-y'])
         child.on('error', () => resolve())
         child.on('close', () => resolve())
       })

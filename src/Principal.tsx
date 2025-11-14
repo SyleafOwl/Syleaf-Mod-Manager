@@ -374,7 +374,7 @@ function Principal() {
       <div className="panel-header subheader-right">
         <h3>Mods</h3>
         <div className="spacer" />
-        <button onClick={addMod} disabled={!selectedChar}>+ Agregar Mod (ZIP/7z)</button>
+  <button onClick={addMod} disabled={!selectedChar}>+ Agregar Mod (ZIP/7z/RAR)</button>
       </div>
 
       {/* Izquierda: Personajes */}
